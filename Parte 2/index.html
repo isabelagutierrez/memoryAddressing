@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang = "es">
+<head>
+<meta charset = "utf-8">
+<meta name = "viewport" content = "width = device-width,initial-scale = 1">
+<title> Disk Scheduling — Visualization </title>
+<script src = "data.js"> </script>
+<script src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"> </script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+    background: #f0f2f7;
+    color: #1a1d23;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; }
+
+  /* ── Header ── */
+
+  header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  header h1 {
+    font-size: 1.9rem;
+    font-weight: 700;
+    letter-spacing: -.03em;
+    color: #111827;
+  }
+
+  header p {
+    color: #6b7280;
+    margin-top: .4rem;
+    font-size: .95rem;
+  }
+  
+  .badge {
+    display: inline-block;
+    background: #e0e7ff;
+    color: #3730a3;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: .6rem;
+  }
+
+  /* ── Stat cards ── */
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 1.2rem 1.4rem;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .8rem;
+  }
+
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .card-label {
+    font-size: .78rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .card-total {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -.03em;
+    line-height: 1;
+    margin-bottom: .35rem;
+  }
+
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: .82rem;
+    color: #6b7280;
+    margin-top: .2rem;
+  }
+
+  .card-row span:last-child { color: #374151; font-weight: 500; }
+
+  /* ── Section containers ── */
+
+  .section {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 1.4rem 1.6rem 1.2rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: .2rem;
+  }
+
+  .section-sub {
+    font-size: .82rem;
+    color: #9ca3af;
+    margin-bottom: 1rem;
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 300px;
+  }
+
+  .chart-wrap-sm {
+    position: relative;
+    width: 100%;
+    height: 240px;
+  }
+
+  /* ── Legend ── */
+
+  .legend {
+    display: flex;
+    gap: 1.2rem;
+    margin-bottom: .8rem;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .82rem;
+    color: #374151;
+  }
+
+  .leg-sq {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── Two-col layout for smaller charts ── */
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  /* ── No-data banner ── */
+
+  .no-data {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 12px;
+    padding: 1.2rem 1.6rem;
+    color: #92400e;
+    font-size: .9rem;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+
+  @media (max-width: 680px) {
+    .cards, .two-col { grid-template-columns: 1fr; }
+  }
+
+</style>
+</head>
+<body>
+<div class = "page">
+
+  <header>
+    <h1>Disk Scheduling — Visualization</h1>
+    <p>Comparación de rendimiento entre FCFS, SCAN y C-SCAN</p>
+    <span class = "badge" id = "headerBadge">Cargando...</span>
+  </header>
+
+  <div class = "no-data" id = "noData">
+    ⚠️ No se encontró <strong>data.js</strong>. Compila y ejecuta
+    <code>scheduler.cpp</code> primero para generar los datos.
+  </div>
+
+  <!-- ── Stat cards ── -->
+
+  <div class = "cards">
+    <div class = "card">
+      <div class = "card-header">
+        <div class = "dot" style = "background:#2563eb"></div>
+        <span class = "card-label">FCFS</span>
+      </div>
+      <div class = "card-total" style = "color:#2563eb" id = "totalFcfs">—</div>
+      <div class = "card-row"><span>Promedio/solicitud</span><span id = "avgFcfs">—</span></div>
+      <div class = "card-row"><span>Salto máximo</span><span id = "maxFcfs">—</span></div>
+    </div>
+    <div class = "card">
+      <div class = "card-header">
+        <div class = "dot" style = "background:#d97706"></div>
+        <span class = "card-label">SCAN</span>
+      </div>
+      <div class = "card-total" style = "color:#d97706" id = "totalScan">—</div>
+      <div class = "card-row"><span>Promedio/solicitud</span><span id = "avgScan">—</span></div>
+      <div class = "card-row"><span>Salto máximo</span><span id = "maxScan">—</span></div>
+    </div>
+    <div class = "card">
+      <div class = "card-header">
+        <div class = "dot" style = "background:#059669"></div>
+        <span class = "card-label">C-SCAN</span>
+      </div>
+      <div class = "card-total" style = "color:#059669" id = "totalCscan">—</div>
+      <div class = "card-row"><span>Promedio/solicitud</span><span id = "avgCscan">—</span></div>
+      <div class = "card-row"><span>Salto máximo</span><span id = "maxCscan">—</span></div>
+    </div>
+  </div>
+
+  <!-- ── Chart 1: Head movement ── -->
+
+  <div class = "section">
+    <div class = "section-title">Movimiento de la Cabeza</div>
+    <div class = "section-sub">
+      Posición del cabezal en cada paso (muestra de 300 puntos). 
+      SCAN y C-SCAN muestran barrios ordenados; FCFS salta aleatoriamente.
+    </div>
+    <div class = "legend">
+      <div class = "legend-item"><div class = "leg-sq" style = "background:#2563eb"></div>FCFS</div>
+      <div class = "legend-item"><div class = "leg-sq" style = "background:#d97706"></div>SCAN</div>
+      <div class = "legend-item"><div class = "leg-sq" style = "background:#059669"></div>C-SCAN</div>
+    </div>
+    <div class = "chart-wrap">
+      <canvas id = "chartHead" role = "img"
+        aria-label = "Gráfica de movimiento de la cabeza del disco para los tres algoritmos">
+      </canvas>
+    </div>
+  </div>
+
+  <!-- ── Chart 2: Cumulative movement ── -->
+
+  <div class = "section">
+    <div class = "section-title">Movimiento Acumulado</div>
+    <div class = "section-sub">
+      Suma acumulada de cilindros recorridos. La pendiente más baja indica mayor eficiencia.
+    </div>
+    <div class = "legend">
+      <div class = "legend-item"><div class = "leg-sq" style = "background:#2563eb"></div>FCFS</div>
+      <div class = "legend-item"><div class = "leg-sq" style = "background:#d97706"></div>SCAN</div>
+      <div class = "legend-item"><div class = "leg-sq" style = "background:#059669"></div>C-SCAN</div>
+    </div>
+    <div class = "chart-wrap">
+      <canvas id = "chartCum" role = "img"
+        aria-label = "Movimiento acumulado de los tres algoritmos de agendamiento">
+      </canvas>
+    </div>
+  </div>
+
+  <!-- ── Charts 3 & 4: Performance + Responsiveness ── -->
+
+  <div class = "two-col">
+
+    <div class = "section">
+      <div class = "section-title">Comparación de Rendimiento</div>
+      <div class = "section-sub">
+        Total de cilindros recorridos y promedio por solicitud.
+      </div>
+      <div class = "chart-wrap-sm">
+        <canvas id = "chartPerf" role = "img"
+          aria-label = "Comparación de movimiento total y promedio entre FCFS, SCAN y C-SCAN">
+        </canvas>
+      </div>
+    </div>
+
+    <div class = "section">
+      <div class = "section-title">Responsividad del Sistema</div>
+      <div class = "section-sub">
+        Salto máximo de la cabeza en un solo paso. Valores altos implican mayor latencia pico.
+      </div>
+      <div class = "chart-wrap-sm">
+        <canvas id = "chartResp" role = "img"
+          aria-label = "Salto máximo de la cabeza del disco para cada algoritmo">
+        </canvas>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /page -->
+
+<script>
+(function () {
+
+  // ── Verificar que data.js se cargó ──────────────────────────────────────────
+
+  if (typeof TOTALS  ===  'undefined') {
+    document.getElementById('noData').style.display  =  'block';
+    document.getElementById('headerBadge').textContent  =  'Sin datos';
+    return;
+  }
+
+  const COLORS  =  {
+    fcfs:  { solid: '#2563eb', alpha: 'rgba(37,99,235,0.12)'  },
+    scan:  { solid: '#d97706', alpha: 'rgba(217,119,6,0.12)'  },
+    cscan: { solid: '#059669', alpha: 'rgba(5,150,105,0.12)'  },
+  };
+
+  // ── Poblar badge y tarjetas ─────────────────────────────────────────────────
+
+  document.getElementById('headerBadge').textContent  = 
+    `Cabeza inicial: ${INITIAL_HEAD}  ·  ${NUM_REQUESTS} solicitudes  ·  Cilindros 0–${MAX_CYLINDER}`;
+
+  function fmt(n) { return Number(n).toLocaleString('es-CO'); }
+
+  document.getElementById('totalFcfs').textContent   =  fmt(TOTALS[0]);
+  document.getElementById('totalScan').textContent   =  fmt(TOTALS[1]);
+  document.getElementById('totalCscan').textContent  =  fmt(TOTALS[2]);
+
+  document.getElementById('avgFcfs').textContent   =  Number(AVERAGES[0]).toFixed(1);
+  document.getElementById('avgScan').textContent   =  Number(AVERAGES[1]).toFixed(1);
+  document.getElementById('avgCscan').textContent  =  Number(AVERAGES[2]).toFixed(1);
+
+  document.getElementById('maxFcfs').textContent   =  fmt(MAX_JUMPS[0]);
+  document.getElementById('maxScan').textContent   =  fmt(MAX_JUMPS[1]);
+  document.getElementById('maxCscan').textContent  =  fmt(MAX_JUMPS[2]);
+
+  // ── Opciones comunes ────────────────────────────────────────────────────────
+
+  const baseLineOpts  =  {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        ticks: { maxTicksLimit: 8, font: { size: 11 } },
+        grid: { color: 'rgba(0,0,0,.05)' }
+      },
+      y: {
+        ticks: { font: { size: 11 } },
+        grid: { color: 'rgba(0,0,0,.05)' }
+      }
+    }
+  };
+
+  const labels300  =  Array.from({ length: PATH_FCFS.length }, (_, i) => i);
+
+  // ── Gráfica 1: Posición de la cabeza ───────────────────────────────────────
+
+  new Chart(document.getElementById('chartHead'), {
+    type: 'line',
+    data: {
+      labels: labels300,
+      datasets: [
+        {
+          label: 'FCFS',
+          data: PATH_FCFS,
+          borderColor: COLORS.fcfs.solid,
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: 'SCAN',
+          data: PATH_SCAN,
+          borderColor: COLORS.scan.solid,
+          backgroundColor: 'transparent',
+          borderWidth: 1.4,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: 'C-SCAN',
+          data: PATH_CSCAN,
+          borderColor: COLORS.cscan.solid,
+          backgroundColor: 'transparent',
+          borderWidth: 1.4,
+          pointRadius: 0,
+          tension: 0,
+        },
+      ]
+    },
+    options: {
+      ...baseLineOpts,
+      scales: {
+        ...baseLineOpts.scales,
+        x: { ...baseLineOpts.scales.x, title: { display: true, text: 'Paso', font: { size: 11 } } },
+        y: { ...baseLineOpts.scales.y, min: 0, max: MAX_CYLINDER,
+             title: { display: true, text: 'Cilindro', font: { size: 11 } } }
+      }
+    }
+  });
+
+  // ── Gráfica 2: Movimiento acumulado ────────────────────────────────────────
+
+  new Chart(document.getElementById('chartCum'), {
+    type: 'line',
+    data: {
+      labels: labels300,
+      datasets: [
+        {
+          label: 'FCFS',
+          data: CUM_FCFS,
+          borderColor: COLORS.fcfs.solid,
+          backgroundColor: COLORS.fcfs.alpha,
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0,
+        },
+        {
+          label: 'SCAN',
+          data: CUM_SCAN,
+          borderColor: COLORS.scan.solid,
+          backgroundColor: COLORS.scan.alpha,
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0,
+        },
+        {
+          label: 'C-SCAN',
+          data: CUM_CSCAN,
+          borderColor: COLORS.cscan.solid,
+          backgroundColor: COLORS.cscan.alpha,
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0,
+        },
+      ]
+    },
+    options: {
+      ...baseLineOpts,
+      scales: {
+        ...baseLineOpts.scales,
+        x: { ...baseLineOpts.scales.x, title: { display: true, text: 'Paso', font: { size: 11 } } },
+        y: { ...baseLineOpts.scales.y,
+             title: { display: true, text: 'Cilindros acumulados', font: { size: 11 } } }
+      }
+    }
+  });
+
+  // ── Gráfica 3: Comparación de rendimiento ──────────────────────────────────
+
+  new Chart(document.getElementById('chartPerf'), {
+    type: 'bar',
+    data: {
+      labels: ['FCFS', 'SCAN', 'C-SCAN'],
+      datasets: [
+        {
+          label: 'Total',
+          data: TOTALS,
+          backgroundColor: [COLORS.fcfs.solid, COLORS.scan.solid, COLORS.cscan.solid],
+          borderRadius: 6,
+          yAxisID: 'yTotal',
+        },
+        {
+          label: 'Promedio',
+          data: AVERAGES,
+          backgroundColor: [COLORS.fcfs.alpha, COLORS.scan.alpha, COLORS.cscan.alpha],
+          borderColor:      [COLORS.fcfs.solid, COLORS.scan.solid, COLORS.cscan.solid],
+          borderWidth: 1.5,
+          borderRadius: 6,
+          yAxisID: 'yAvg',
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { size: 11 }, boxWidth: 12, padding: 12 }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 12 } } },
+        yTotal: {
+          position: 'left',
+          title: { display: true, text: 'Total', font: { size: 10 } },
+          grid: { color: 'rgba(0,0,0,.05)' },
+          ticks: { font: { size: 10 } },
+        },
+        yAvg: {
+          position: 'right',
+          title: { display: true, text: 'Promedio', font: { size: 10 } },
+          grid: { drawOnChartArea: false },
+          ticks: { font: { size: 10 } },
+        }
+      }
+    }
+  });
+
+  // ── Gráfica 4: Responsividad ────────────────────────────────────────────────
+  
+  new Chart(document.getElementById('chartResp'), {
+    type: 'bar',
+    data: {
+      labels: ['FCFS', 'SCAN', 'C-SCAN'],
+      datasets: [{
+        label: 'Salto máximo',
+        data: MAX_JUMPS,
+        backgroundColor: [COLORS.fcfs.solid, COLORS.scan.solid, COLORS.cscan.solid],
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 12 } } },
+        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { size: 11 } },
+             title: { display: true, text: 'Cilindros', font: { size: 11 } } }
+      }
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
